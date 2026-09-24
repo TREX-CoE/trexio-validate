@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+# trexio-validate is a self-contained executable: consumers do not link to
+# anything, so no dependencies need to be found here.
+include("${CMAKE_CURRENT_LIST_DIR}/TrexioValidateTargets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/TrexioValidate.cmake")
+
+check_required_components(TrexioValidate)
