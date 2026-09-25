@@ -18,6 +18,15 @@ option(TREXIO_VALIDATE_FETCH_TREXIO
   "Build a bundled TREXIO instead of using an installed one" OFF)
 option(TREXIO_VALIDATE_FETCH_LIBCINT
   "Build a bundled libcint instead of using an installed one" OFF)
+# The library validates open trexio_t handles, which must come from the TREXIO
+# library the application uses. A bundled TREXIO is a separate copy, so the
+# library is only built against an installed TREXIO.
+cmake_dependent_option(TREXIO_VALIDATE_LIBRARY
+  "Build the trexio_validate library (C, C++ and Python interfaces)" ON
+  "NOT TREXIO_VALIDATE_FETCH_TREXIO" OFF)
+cmake_dependent_option(TREXIO_VALIDATE_PYTHON
+  "Install the trexio_validate Python module" ON
+  "TREXIO_VALIDATE_LIBRARY" OFF)
 cmake_dependent_option(TREXIO_VALIDATE_BUILD_TESTS
   "Build the tests of trexio-validate itself" ON
   "PROJECT_IS_TOP_LEVEL" OFF)
@@ -29,9 +38,15 @@ cmake_dependent_option(TREXIO_VALIDATE_INSTALL
 
 include(TrexioValidateDependencies)
 
-# ---------------------------------------------------------------- executable
+# ---------------------------------------------------------------- program and library
 
 add_subdirectory(src)
+if(TREXIO_VALIDATE_PYTHON)
+  add_subdirectory(python)
+endif()
+if(TREXIO_VALIDATE_FETCH_TREXIO)
+  message(STATUS "trexio_validate library: disabled, since TREXIO is bundled")
+endif()
 
 # The helper functions are usable right away by a project that pulls us in
 # with add_subdirectory() or FetchContent.
@@ -53,6 +68,17 @@ if(TREXIO_VALIDATE_INSTALL)
   install(TARGETS trexio-validate
     EXPORT TrexioValidateTargets
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+  if(TREXIO_VALIDATE_LIBRARY)
+    install(TARGETS trexio_validate
+      EXPORT TrexioValidateTargets
+      LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+      ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+      RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    install(FILES
+      "${PROJECT_SOURCE_DIR}/include/trexio_validate.h"
+      "${PROJECT_SOURCE_DIR}/include/trexio_validate.hpp"
+      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+  endif()
   install(EXPORT TrexioValidateTargets
     NAMESPACE TrexioValidate::
     DESTINATION "${_cmakedir}")

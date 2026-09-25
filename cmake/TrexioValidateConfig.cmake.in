@@ -1,7 +1,32 @@
 @PACKAGE_INIT@
 
-# trexio-validate is a self-contained executable: consumers do not link to
-# anything, so no dependencies need to be found here.
+# Targets:
+#   TrexioValidate::trexio-validate  the program
+#   TrexioValidate::trexio_validate  the library (if it was built), whose
+#                                    headers include trexio.h; TREXIO is found
+#                                    here the same way it was when building.
+
+set(TrexioValidate_HAS_LIBRARY @TREXIO_VALIDATE_LIBRARY@)
+
+if(TrexioValidate_HAS_LIBRARY AND NOT TARGET TrexioValidate::trexio_dependency)
+  include(CMakeFindDependencyMacro)
+  set(_tv_provider "@TREXIO_VALIDATE_TREXIO_PROVIDER@")
+  add_library(TrexioValidate::trexio_dependency INTERFACE IMPORTED)
+  if(_tv_provider STREQUAL "config")
+    find_dependency(trexio CONFIG)
+    target_link_libraries(TrexioValidate::trexio_dependency INTERFACE trexio::trexio)
+  elseif(_tv_provider STREQUAL "pkgconfig")
+    find_dependency(PkgConfig)
+    pkg_check_modules(TREXIO_PC REQUIRED IMPORTED_TARGET trexio)
+    target_link_libraries(TrexioValidate::trexio_dependency INTERFACE PkgConfig::TREXIO_PC)
+  else()
+    set_target_properties(TrexioValidate::trexio_dependency PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "@TREXIO_INCLUDE_DIR@"
+      INTERFACE_LINK_LIBRARIES "@TREXIO_LIBRARY@")
+  endif()
+  unset(_tv_provider)
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/TrexioValidateTargets.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/TrexioValidate.cmake")
 
