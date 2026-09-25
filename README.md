@@ -12,7 +12,7 @@ far.
 
 | Check | What is verified |
 |---|---|
-| `basis` | basis and AO data are consistent (index ranges, number of AOs per shell, ...) and supported |
+| `basis` | basis and AO data are consistent and supported: `ao.num` equals the number of functions the shells define (2l+1 or (l+1)(l+2)/2 per shell, as `ao.cartesian` says), each shell has that many AOs in `ao.shell`, and all indices are in range |
 | `nucleus_repulsion` | `nucleus.repulsion` matches the charges and coordinates |
 | `electron_count` | `electron.num = up_num + dn_num`; `mo.occupation` sums to the electron count (per spin when `mo.spin` is present) |
 | `mo_orthonormality` | C<sup>†</sup> S C = 1 with S computed from the basis set |
