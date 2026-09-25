@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LIBCINT_VERSION: 6.1.3
+
+jobs:
+  unix:
+    name: ${{ matrix.os }}, ${{ matrix.compiler }}, TREXIO ${{ matrix.trexio }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, compiler: gcc, trexio: "2.6.1"}
+          - {os: ubuntu-24.04, compiler: clang, trexio: "2.6.1"}
+          # The development version has the in-memory back end.
+          - {os: ubuntu-24.04, compiler: gcc, trexio: master}
+          - {os: macos-15, compiler: clang, trexio: "2.6.1"}
+    env:
+      DEPS: ${{ github.workspace }}/../deps
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install packages (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build libhdf5-dev gfortran clang ${{ matrix.trexio == 'master' && 'emacs-nox' || '' }}
+
+      - name: Install packages (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ninja hdf5 gcc
+          echo "FC=$(ls $(brew --prefix gcc)/bin/gfortran-* | head -1)" >> "$GITHUB_ENV"
+          echo "HDF5_ROOT=$(brew --prefix hdf5)" >> "$GITHUB_ENV"
+
+      - name: Select the compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = clang ]; then
+            echo "CC=clang" >> "$GITHUB_ENV"; echo "CXX=clang++" >> "$GITHUB_ENV"
+          else
+            echo "CC=gcc" >> "$GITHUB_ENV"; echo "CXX=g++" >> "$GITHUB_ENV"
+          fi
+
+      - name: Cache libcint
+        id: cache-libcint
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DEPS }}/libcint
+          key: libcint-${{ env.LIBCINT_VERSION }}-${{ matrix.os }}-${{ matrix.compiler }}
+
+      - name: Build libcint
+        if: steps.cache-libcint.outputs.cache-hit != 'true'
+        run: ci/build-deps.sh "$DEPS/libcint" libcint "$LIBCINT_VERSION"
+
+      - name: Cache TREXIO
+        id: cache-trexio
+        if: matrix.trexio != 'master'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DEPS }}/trexio
+          key: trexio-${{ matrix.trexio }}-${{ matrix.os }}-${{ matrix.compiler }}
+
+      - name: Build TREXIO
+        if: steps.cache-trexio.outputs.cache-hit != 'true'
+        run: ci/build-deps.sh "$DEPS/trexio" trexio "${{ matrix.trexio }}"
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_PREFIX_PATH="$DEPS/libcint;$DEPS/trexio" \
+            -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Require the in-memory back-end tests to have run
+        if: matrix.trexio == 'master'
+        run: |
+          if ctest --test-dir build -N | grep -q memory_backend; then
+            ctest --test-dir build -R memory_backend -V | grep "memory back-end tests passed"
+          fi
+
+      - name: Install
+        run: cmake --install build --prefix "$DEPS/trexio-validate"
+
+      - name: Use the installed package
+        run: |
+          cmake -S examples/consumer -B consumer -G Ninja \
+            -DCMAKE_PREFIX_PATH="$DEPS/trexio-validate;$DEPS/libcint;$DEPS/trexio"
+          cmake --build consumer
+          ctest --test-dir consumer --output-on-failure
+
+      - name: Use the installed Python module
+        run: |
+          module=$(find "$DEPS/trexio-validate" -type d -name trexio_validate -path '*site-packages*' | head -1)
+          if [ -n "$module" ]; then
+            PYTHONPATH=$(dirname "$module") python3 -c "
+          import trexio_validate as tv
+          report = tv.validate_file('tests/data/h2o_631gs_sph.h5', require='all')
+          print(report)
+          report.raise_for_failure()"
+          fi
+
+  bundled:
+    name: ubuntu-24.04, bundled TREXIO and libcint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build libhdf5-dev gfortran
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DTREXIO_VALIDATE_FETCH_TREXIO=ON -DTREXIO_VALIDATE_FETCH_LIBCINT=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
