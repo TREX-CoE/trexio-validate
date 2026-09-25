@@ -1,5 +1,5 @@
 add_executable(test_conventions test_conventions.cpp)
-target_link_libraries(test_conventions PRIVATE trexio_validate_core)
+target_link_libraries(test_conventions PRIVATE trexio_validate_objects)
 add_test(NAME conventions COMMAND test_conventions)
 
 set(data "${CMAKE_CURRENT_SOURCE_DIR}/data")
@@ -51,3 +51,33 @@ add_test(NAME cli_bad_option COMMAND trexio-validate --no-such-option x.h5)
 set_property(TEST cli_bad_option PROPERTY WILL_FAIL TRUE)
 add_test(NAME cli_missing_file COMMAND trexio-validate "${data}/does_not_exist.h5")
 set_property(TEST cli_missing_file PROPERTY WILL_FAIL TRUE)
+
+# ---------------------------------------------------------------- library interfaces
+
+if(TREXIO_VALIDATE_LIBRARY)
+  enable_language(C)
+  add_executable(test_c_api test_c_api.c)
+  target_link_libraries(test_c_api PRIVATE trexio_validate)
+  add_test(NAME c_api COMMAND test_c_api
+    "${data}/h2o_631gs_sph.h5" "${data}/bad_nucleus_repulsion.h5")
+
+  # Plays the part of an application writing TREXIO_MEMORY files. The
+  # in-memory back end is newer than TREXIO 2.6.1; without it the tests using
+  # it report themselves as skipped.
+  add_library(tv_memory_helper SHARED memory_helper.cpp)
+  target_link_libraries(tv_memory_helper PRIVATE trexio_validate_objects)
+  set_target_properties(tv_memory_helper PROPERTIES CXX_VISIBILITY_PRESET hidden)
+
+  add_executable(test_memory test_memory.cpp)
+  target_link_libraries(test_memory PRIVATE trexio_validate tv_memory_helper)
+  add_test(NAME memory_backend COMMAND test_memory "${data}/h2o_631gs_sph.h5")
+  set_tests_properties(memory_backend PROPERTIES SKIP_RETURN_CODE 77)
+
+  find_package(Python3 COMPONENTS Interpreter)
+  if(TREXIO_VALIDATE_PYTHON AND Python3_FOUND)
+    add_test(NAME python COMMAND "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/test_python.py" "${data}" "$<TARGET_FILE:tv_memory_helper>")
+    set_tests_properties(python PROPERTIES
+      ENVIRONMENT "PYTHONPATH=${TREXIO_VALIDATE_PYTHON_BUILD_DIR}")
+  endif()
+endif()

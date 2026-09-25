@@ -35,10 +35,12 @@ if(TREXIO_VALIDATE_FETCH_TREXIO)
   message(STATUS "Building TREXIO from ${TREXIO_VALIDATE_TREXIO_URL}")
   _trexio_validate_fetch_trexio()
   target_link_libraries(TrexioValidate_trexio INTERFACE trexio)
+  set(TREXIO_VALIDATE_TREXIO_PROVIDER bundled)
 else()
   find_package(trexio CONFIG QUIET)
   if(TARGET trexio::trexio)
     target_link_libraries(TrexioValidate_trexio INTERFACE trexio::trexio)
+    set(TREXIO_VALIDATE_TREXIO_PROVIDER config)
     message(STATUS "Found TREXIO (CMake package): ${trexio_DIR}")
   else()
     find_package(PkgConfig QUIET)
@@ -47,6 +49,7 @@ else()
     endif()
     if(TARGET PkgConfig::TREXIO_PC)
       target_link_libraries(TrexioValidate_trexio INTERFACE PkgConfig::TREXIO_PC)
+      set(TREXIO_VALIDATE_TREXIO_PROVIDER pkgconfig)
       message(STATUS "Found TREXIO (pkg-config): ${TREXIO_PC_VERSION}")
     else()
       find_path(TREXIO_INCLUDE_DIR trexio.h)
@@ -59,10 +62,17 @@ else()
       endif()
       target_include_directories(TrexioValidate_trexio INTERFACE "${TREXIO_INCLUDE_DIR}")
       target_link_libraries(TrexioValidate_trexio INTERFACE "${TREXIO_LIBRARY}")
+      set(TREXIO_VALIDATE_TREXIO_PROVIDER path)
       message(STATUS "Found TREXIO: ${TREXIO_LIBRARY}")
     endif()
   endif()
 endif()
+
+# Consumers of the installed library get TREXIO through the imported target
+# TrexioValidate::trexio_dependency, which TrexioValidateConfig.cmake creates
+# the same way TREXIO was found here.
+set(TREXIO_VALIDATE_TREXIO_INSTALL_INTERFACE
+  "$<INSTALL_INTERFACE:TrexioValidate::trexio_dependency>")
 
 # ---------------------------------------------------------------- libcint
 

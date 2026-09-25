@@ -20,10 +20,12 @@ class Error : public std::runtime_error {
 // Throws tv::Error unless rc is TREXIO_SUCCESS.
 void check_trexio(trexio_exit_code rc, const std::string& what);
 
-// Owning handle of an open TREXIO file.
+// Handle of an open TREXIO file: either opened (and closed) here, or borrowed
+// from the caller, e.g. a file of the in-memory back end.
 class TrexioFile {
  public:
   explicit TrexioFile(const std::string& path);
+  TrexioFile(trexio_t* borrowed, const std::string& label);
   ~TrexioFile();
   TrexioFile(const TrexioFile&) = delete;
   TrexioFile& operator=(const TrexioFile&) = delete;
@@ -34,6 +36,7 @@ class TrexioFile {
  private:
   trexio_t* file_ = nullptr;
   std::string path_;
+  bool owned_ = true;
 };
 
 // One stored two-electron integral <ij|kl> (physicists' notation, as in the

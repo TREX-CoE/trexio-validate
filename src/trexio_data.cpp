@@ -23,8 +23,13 @@ TrexioFile::TrexioFile(const std::string& path) : path_(path) {
   }
 }
 
+TrexioFile::TrexioFile(trexio_t* borrowed, const std::string& label)
+    : file_(borrowed), path_(label), owned_(false) {
+  if (file_ == nullptr) throw Error("null TREXIO file handle");
+}
+
 TrexioFile::~TrexioFile() {
-  if (file_ != nullptr) trexio_close(file_);
+  if (owned_ && file_ != nullptr) trexio_close(file_);
 }
 
 namespace {

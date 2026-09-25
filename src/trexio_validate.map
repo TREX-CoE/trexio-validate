@@ -1,0 +1,5 @@
+/* Export only the C interface of trexio_validate.h from the shared library. */
+{
+  global: trexio_validate_*;
+  local: *;
+};

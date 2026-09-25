@@ -70,6 +70,7 @@ trexio-validate [options] FILE...
       --max-eri-dim N    size limit for checks needing the full ERI tensor (64)
   -q, --quiet            print only failures and the summary
   -l, --list-checks      list the available checks
+  -V, --version          print the version
 ```
 
 Exit status: 0 if every check that could run passed, 1 if any failed, 2 on
@@ -105,6 +106,13 @@ and/or `TREXIO_VALIDATE_FETCH_LIBCINT=ON`. These download TREXIO 2.6.1 and
 libcint 6.1.3 and link them statically. TREXIO 2.6 needs a Fortran compiler to
 configure, and HDF5 to read `.h5` files.
 
+Besides the program, the build produces the shared library `libtrexio_validate`
+(C and C++ interfaces, see below) and the Python module `trexio_validate`
+(options `TREXIO_VALIDATE_LIBRARY` and `TREXIO_VALIDATE_PYTHON`, both on by
+default; the module is installed in `TREXIO_VALIDATE_PYTHON_INSTALL_DIR`, the
+interpreter's `site-packages` below the prefix). The library is not built with
+a bundled TREXIO, for the reason given in the next section.
+
 ## Using it from another project's test suite
 
 ```cmake
@@ -130,11 +138,70 @@ trexio_validate_add_test(validate_water
 [cmake/TrexioValidate.cmake](cmake/TrexioValidate.cmake). The executable is
 available as the target `TrexioValidate::trexio-validate` for custom use.
 [examples/consumer](examples/consumer) is a complete example of both ways of
-consuming the project.
+consuming the project, including the library.
 
 When included as a subproject, the project neither builds its own tests nor
 installs anything, unless `TREXIO_VALIDATE_BUILD_TESTS` /
 `TREXIO_VALIDATE_INSTALL` are set.
+
+## Validating open files from C, C++ and Python
+
+A program can validate TREXIO data it has just written, including files of the
+in-memory back end (`TREXIO_MEMORY`), by passing the open `trexio_t*` handle to
+the library. The handle is only read, and it is not closed.
+
+C ([include/trexio_validate.h](include/trexio_validate.h)):
+
+```c
+#include <trexio_validate.h>
+
+trexio_validate_options_t* options = trexio_validate_options_create();
+trexio_validate_options_require(options, "mo_orthonormality");
+trexio_validate_report_t* report = NULL;
+if (trexio_validate_run(file, options, &report) == TREXIO_VALIDATE_FAILED)
+  fputs(trexio_validate_report_text(report), stderr);
+trexio_validate_report_destroy(report);
+trexio_validate_options_destroy(options);
+```
+
+C++ ([include/trexio_validate.hpp](include/trexio_validate.hpp), a header-only
+wrapper of the C interface):
+
+```cpp
+#include <trexio_validate.hpp>
+
+const auto report = trexio_validate::validate(file, trexio_validate::Options().require("all"));
+if (!report.ok()) std::cerr << report.text();
+```
+
+Link to `TrexioValidate::trexio_validate`, available after
+`find_package(TrexioValidate)` or `FetchContent`; it brings TREXIO's include
+directory and library along.
+
+Python, e.g. for data written by a program's C++ core and handed to Python as
+the address of the handle:
+
+```python
+import trexio_validate
+
+report = trexio_validate.validate(address, require=["mo_orthonormality"], tolerance=1e-9)
+print(report)                # the same table as the program prints
+report.raise_for_failure()   # raises trexio_validate.ValidationError
+```
+
+`validate()` accepts the handle as an integer address, a `ctypes` pointer, a
+`PyCapsule`, or a `trexio.File`; `validate_file()` takes a path. The module
+uses `ctypes` and needs no compilation; `TREXIO_VALIDATE_LIBRARY` in the
+environment overrides the library it loads.
+
+**The handle must come from the TREXIO library that trexio-validate is linked
+to.** The layout of `trexio_t` is private to TREXIO, so a handle created by a
+separately compiled copy of the library is not compatible in general. This is
+satisfied when the program and trexio-validate link to the same installed
+`libtrexio`. It is not guaranteed for the `trexio` Python packages on PyPI,
+which compile their own copy of TREXIO into the extension module (it works
+only if both copies come from identical sources and configuration); write such
+files to disk and use `validate_file()` instead.
 
 ## Test data
 

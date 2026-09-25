@@ -36,3 +36,12 @@ trexio_validate_add_test(validate_h2o
   FILE "${CMAKE_CURRENT_BINARY_DIR}/h2o.h5"
   FIXTURES_REQUIRED h2o_file
   REQUIRE mo_orthonormality ao_1e_int_overlap ao_2e_int_eri)
+
+# The library: validate a file through its open trexio_t handle.
+if(TARGET TrexioValidate::trexio_validate)
+  add_executable(validate_handle validate_handle.cpp)
+  target_link_libraries(validate_handle PRIVATE TrexioValidate::trexio_validate)
+  add_test(NAME validate_handle
+    COMMAND validate_handle "${CMAKE_CURRENT_BINARY_DIR}/h2o.h5")
+  set_tests_properties(validate_handle PROPERTIES FIXTURES_REQUIRED h2o_file)
+endif()
