@@ -87,8 +87,18 @@ Example output for a file whose AO integrals are in the wrong order:
 
 ## Building
 
-Requirements: CMake ≥ 3.21, a C++17 compiler, TREXIO (the C library), and
-libcint (or its API-compatible fork qcint).
+Requirements: CMake ≥ 3.21, a C++17 compiler, TREXIO 2.1 or later (the C
+library), and libcint (or its API-compatible fork qcint).
+
+Older TREXIO releases lack some of the fields that can be checked. At configure
+time, each function trexio-validate uses is looked up in `trexio.h`, and only
+the code for the available ones is compiled. A check whose data the TREXIO in
+use cannot read, such as the dipole integrals before TREXIO 2.6, is reported as
+skipped with the reason (also in `--list-checks`), or as failed if it is
+required by name; `--require all` means all checks this build can run. Fields
+that cannot be read are listed in the output of the `basis` check. Notably,
+without `mo.spin` (TREXIO before 2.2.3) the alpha and beta orbitals of an
+open-shell file cannot be told apart. CI covers every minor release since 2.1.
 
 ```sh
 cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/trexio

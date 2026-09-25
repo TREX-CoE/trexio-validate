@@ -42,7 +42,9 @@ expect("mo_orthonormality" in checks and "ao_2e_int_eri" in checks, "check list"
 report = tv.validate_file(good, require="all")
 expect(report.ok and report.result == tv.OK, "valid file passes")
 expect(len(report) == len(checks), "every check ran")
-expect(all(r.status == "pass" for r in report), "every check passed")
+unavailable = {name for name, text in checks.items() if "[unavailable" in text}
+expect(all(r.status == "pass" or (r.status == "skip" and r.name in unavailable) for r in report),
+       "every available check passed")
 expect("PASS  mo_orthonormality" in str(report), "report text")
 
 bad = tv.validate_file(os.path.join(data, "bad_nucleus_repulsion.h5"), checks=["nucleus_repulsion"])

@@ -29,6 +29,7 @@ function(_trexio_validate_fetch_trexio)
     DOWNLOAD_EXTRACT_TIMESTAMP ON
     EXCLUDE_FROM_ALL)
   FetchContent_MakeAvailable(trexio)
+  set(trexio_SOURCE_DIR "${trexio_SOURCE_DIR}" PARENT_SCOPE)
 endfunction()
 
 if(TREXIO_VALIDATE_FETCH_TREXIO)

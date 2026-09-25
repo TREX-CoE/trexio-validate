@@ -29,6 +29,12 @@ jobs:
           # The development version has the in-memory back end.
           - {os: ubuntu-24.04, compiler: gcc, trexio: master}
           - {os: macos-15, compiler: clang, trexio: "2.6.1"}
+          # Older releases, which lack some of the optional functions.
+          - {os: ubuntu-24.04, compiler: gcc, trexio: "2.5.0"}
+          - {os: ubuntu-24.04, compiler: gcc, trexio: "2.4.2"}
+          - {os: ubuntu-24.04, compiler: gcc, trexio: "2.3.2"}
+          - {os: ubuntu-24.04, compiler: gcc, trexio: "2.2.3"}
+          - {os: ubuntu-24.04, compiler: gcc, trexio: "2.1.0"}
     env:
       DEPS: ${{ github.workspace }}/../deps
     steps:

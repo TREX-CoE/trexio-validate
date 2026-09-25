@@ -4,7 +4,13 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include <trexio.h>
+#ifdef __cplusplus
+}
+#endif
 
 #if defined(_WIN32)
 #  define TV_MEMORY_API __declspec(dllexport)
