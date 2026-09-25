@@ -90,6 +90,39 @@ def fix_ao_integrals(path, mf):
                                        np.ascontiguousarray(eri_val))
 
 
+def write_bad_ao_counts(p, water_cart):
+    """Files whose ao.num disagrees with the shells of the basis set."""
+    # Cartesian AOs labelled as spherical.
+    f = p("bad_ao_cartesian_flag.h5")
+    write(f, water_cart)
+    with trexio.File(f, "u", back_end=trexio.TREXIO_HDF5) as tf:
+        ao_num = trexio.read_ao_num(tf)
+        ao_shell = trexio.read_ao_shell(tf)
+        norm = trexio.read_ao_normalization(tf)
+        trexio.delete_ao(tf)
+        trexio.write_ao_cartesian(tf, 0)
+        trexio.write_ao_num(tf, ao_num)
+        trexio.write_ao_shell(tf, ao_shell)
+        trexio.write_ao_normalization(tf, norm)
+
+    # One AO too many, consistently in every array that depends on ao.num.
+    f = p("bad_ao_num.h5")
+    write(f, water_cart)
+    with trexio.File(f, "u", back_end=trexio.TREXIO_HDF5) as tf:
+        ao_num = trexio.read_ao_num(tf)
+        ao_shell = list(trexio.read_ao_shell(tf))
+        norm = list(trexio.read_ao_normalization(tf))
+        c = np.array(trexio.read_mo_coefficient(tf))
+        trexio.delete_ao(tf)
+        trexio.delete_mo(tf)
+        trexio.write_ao_cartesian(tf, 1)
+        trexio.write_ao_num(tf, ao_num + 1)
+        trexio.write_ao_shell(tf, ao_shell + [ao_shell[-1]])
+        trexio.write_ao_normalization(tf, norm + [1.0])
+        trexio.write_mo_num(tf, c.shape[0])
+        trexio.write_mo_coefficient(tf, np.ascontiguousarray(np.hstack([c, np.zeros((c.shape[0], 1))])))
+
+
 def main(outdir):
     os.makedirs(outdir, exist_ok=True)
     p = lambda name: os.path.join(outdir, name)
@@ -119,6 +152,8 @@ def main(outdir):
     # --- invalid files ---------------------------------------------------
     # pyscf-forge's own output, with the AO integrals in PySCF's AO order.
     write(p("bad_pyscf_forge_ao_integrals.h5"), water, write_ao_eri=True, eri_sym="s8")
+
+    write_bad_ao_counts(p, water_cart)
 
     # MO coefficients in PySCF's AO order instead of TREXIO's.
     f = p("bad_ao_order.h5")

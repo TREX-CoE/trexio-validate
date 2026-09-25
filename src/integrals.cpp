@@ -115,14 +115,23 @@ Basis::Basis(const TrexioData& d) {
   // AOs of each shell.
   nao_ = d.ao_num;
   shell_aos_.assign(static_cast<size_t>(std::max(nsh, 0)), {});
-  int expected_nao = 0;
+  // ao.num must agree with the number of functions the shells define.
+  int expected_nao = 0, other_nao = 0;
   for (int s = 0; s < nsh; ++s) {
     const int l = d.basis_shell_ang_mom[static_cast<size_t>(s)];
-    if (l >= 0 && l <= max_ang_mom) expected_nao += nfunc(l, cartesian);
+    if (l < 0 || l > max_ang_mom) continue;
+    expected_nao += nfunc(l, cartesian);
+    other_nao += nfunc(l, !cartesian);
   }
   if (expected_nao != nao_) {
-    problem("ao_num is " + std::to_string(nao_) + " but the shells define " + std::to_string(expected_nao) + " " +
-            (cartesian ? "Cartesian" : "spherical") + " functions");
+    std::string msg = "ao.num is " + std::to_string(nao_) + " but the shells define " + std::to_string(expected_nao) +
+                      (cartesian ? " Cartesian" : " spherical") + " functions";
+    if (other_nao == nao_ && other_nao != expected_nao) {
+      msg += std::string("; ") + std::to_string(nao_) + " is the number of " +
+             (cartesian ? "spherical" : "Cartesian") + " functions, so ao.cartesian = " +
+             std::to_string(*d.ao_cartesian) + " is probably wrong";
+    }
+    problem(msg);
   }
   if (!d.ao_shell.empty()) {
     for (int i = 0; i < nao_; ++i) {

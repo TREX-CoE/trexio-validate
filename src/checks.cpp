@@ -208,8 +208,8 @@ CheckResult Runner::check_basis() {
   if (basis_unsupported_) return {"basis", Status::skip, "unsupported: " + basis_error_ + warn};
   if (!basis_) return {"basis", Status::fail, basis_error_ + warn};
   return {"basis", Status::pass,
-          std::to_string(data_.ao_num) + " " + (*data_.ao_cartesian ? "Cartesian" : "spherical") + " AOs in " +
-              std::to_string(data_.basis_shell_num) + " shells" + warn};
+          "ao.num = " + std::to_string(data_.ao_num) + " agrees with the " + (*data_.ao_cartesian ? "Cartesian" : "spherical") +
+              " functions of the " + std::to_string(data_.basis_shell_num) + " shells" + warn};
 }
 
 // ---------------------------------------------------------------- nucleus
