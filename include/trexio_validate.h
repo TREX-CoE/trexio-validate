@@ -21,8 +21,6 @@
 
 #include <stdint.h>
 
-#include <trexio.h>
-
 #if defined(_WIN32) || defined(__CYGWIN__)
 #  if defined(TREXIO_VALIDATE_BUILDING)
 #    define TREXIO_VALIDATE_API __declspec(dllexport)
@@ -36,6 +34,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Inside the extern "C" block: TREXIO releases before 2.3 lack their own. */
+#include <trexio.h>
 
 /* Return values of trexio_validate_run(), trexio_validate_path() and
    trexio_validate_report_result(); they are also the exit codes of the

@@ -9,19 +9,29 @@ set(data "${CMAKE_CURRENT_SOURCE_DIR}/data")
 
 set(common basis nucleus_repulsion electron_count mo_orthonormality)
 set(ao_1e ao_1e_int_overlap ao_1e_int_kinetic ao_1e_int_potential_n_e
-  ao_1e_int_core_hamiltonian ao_1e_int_dipole_x ao_1e_int_dipole_y ao_1e_int_dipole_z)
+  ao_1e_int_core_hamiltonian)
+set(mo_dipoles)
+# Dipole integrals can only be checked if this TREXIO can read them.
+if(TV_HAVE_trexio_read_ao_1e_int_dipole_x)
+  list(APPEND ao_1e ao_1e_int_dipole_x ao_1e_int_dipole_y ao_1e_int_dipole_z)
+  set(mo_dipoles mo_1e_int_dipole_x mo_1e_int_dipole_y mo_1e_int_dipole_z)
+endif()
 
 trexio_validate_add_test(valid_h2o_631gs_sph FILE "${data}/h2o_631gs_sph.h5"
   REQUIRE all)
 trexio_validate_add_test(valid_h2o_631gs_cart FILE "${data}/h2o_631gs_cart.h5"
-  REQUIRE ${common} ${ao_1e} mo_1e_int_dipole_x mo_1e_int_dipole_y mo_1e_int_dipole_z
-  ao_2e_int_eri)
+  REQUIRE ${common} ${ao_1e} ${mo_dipoles} ao_2e_int_eri)
 trexio_validate_add_test(valid_n2_ccpvqz_sph FILE "${data}/n2_ccpvqz_sph.h5"
   REQUIRE ${common})
 trexio_validate_add_test(valid_n2_ccpvtz_cart FILE "${data}/n2_ccpvtz_cart.h5"
   REQUIRE ${common})
 trexio_validate_add_test(valid_oh_631g_uhf FILE "${data}/oh_631g_uhf.h5"
   REQUIRE all)
+if(NOT TV_HAVE_trexio_read_mo_spin)
+  # Without mo.spin, the alpha and beta MOs of the open-shell file cannot be
+  # told apart.
+  set_property(TEST valid_oh_631g_uhf PROPERTY DISABLED TRUE)
+endif()
 
 # ---------------------------------------------------------------- invalid files
 # Each file is broken in one way; only the check that should catch it is run.

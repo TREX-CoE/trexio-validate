@@ -2,6 +2,9 @@
 
 #include <algorithm>
 
+// TV_HAVE_<function>: whether the TREXIO in use provides an optional function.
+#include "trexio_validate_features.h"
+
 namespace tv {
 
 const std::vector<std::string> one_electron_operators = {
@@ -17,7 +20,17 @@ void check_trexio(trexio_exit_code rc, const std::string& what) {
 
 TrexioFile::TrexioFile(const std::string& path) : path_(path) {
   trexio_exit_code rc = TREXIO_SUCCESS;
+#if TV_HAVE_TREXIO_AUTO
   file_ = trexio_open(path.c_str(), 'r', TREXIO_AUTO, &rc);
+#else
+  // Without automatic detection of the back end, try each in turn.
+  for (const back_end_t back_end : {TREXIO_HDF5, TREXIO_TEXT}) {
+    file_ = trexio_open(path.c_str(), 'r', back_end, &rc);
+    if (file_ != nullptr && rc == TREXIO_SUCCESS) break;
+    if (file_ != nullptr) trexio_close(file_);
+    file_ = nullptr;
+  }
+#endif
   if (file_ == nullptr || rc != TREXIO_SUCCESS) {
     throw Error("cannot open TREXIO file '" + path + "': " + trexio_string_of_error(rc));
   }
@@ -80,15 +93,49 @@ bool has(trexio_exit_code rc, const char* what) {
     }                                                                    \
   } while (0)
 
+const std::map<std::string, std::string>& unavailable_checks() {
+  static const std::map<std::string, std::string> unavailable = [] {
+    std::map<std::string, std::string> u;
+    auto lacks = [&u](const std::string& check, bool have, const std::string& function) {
+      if (!have) u[check] = "the TREXIO library does not provide " + function;
+    };
+    lacks("ao_1e_int_dipole_x", TV_HAVE_trexio_read_ao_1e_int_dipole_x, "trexio_read_ao_1e_int_dipole_x");
+    lacks("ao_1e_int_dipole_y", TV_HAVE_trexio_read_ao_1e_int_dipole_y, "trexio_read_ao_1e_int_dipole_y");
+    lacks("ao_1e_int_dipole_z", TV_HAVE_trexio_read_ao_1e_int_dipole_z, "trexio_read_ao_1e_int_dipole_z");
+    lacks("mo_1e_int_dipole_x", TV_HAVE_trexio_read_mo_1e_int_dipole_x, "trexio_read_mo_1e_int_dipole_x");
+    lacks("mo_1e_int_dipole_y", TV_HAVE_trexio_read_mo_1e_int_dipole_y, "trexio_read_mo_1e_int_dipole_y");
+    lacks("mo_1e_int_dipole_z", TV_HAVE_trexio_read_mo_1e_int_dipole_z, "trexio_read_mo_1e_int_dipole_z");
+    return u;
+  }();
+  return unavailable;
+}
+
+std::vector<std::string> unreadable_fields() {
+  std::vector<std::string> fields;
+  auto lacks = [&fields](bool have, const char* field) {
+    if (!have) fields.push_back(field);
+  };
+  lacks(TV_HAVE_trexio_read_mo_spin, "mo.spin");
+  lacks(TV_HAVE_trexio_read_basis_r_power, "basis.r_power");
+  lacks(TV_HAVE_trexio_has_basis_oscillation_arg, "basis.oscillation_arg");
+  lacks(TV_HAVE_trexio_has_basis_exponent_im && TV_HAVE_trexio_has_basis_coefficient_im,
+        "basis.exponent_im/coefficient_im");
+  lacks(TV_HAVE_trexio_has_pbc_periodic, "pbc.periodic");
+  lacks(TV_HAVE_trexio_has_ecp || TV_HAVE_trexio_has_ecp_num, "ecp");
+  return fields;
+}
+
 TrexioData read_trexio_data(const TrexioFile& file) {
   trexio_t* f = file.get();
   TrexioData d;
 
+#if TV_HAVE_trexio_has_pbc_periodic
   if (TV_HAS(pbc_periodic)) {
     int32_t periodic = 0;
     TV_READ_SCALAR(pbc_periodic, periodic);
     d.periodic = periodic != 0;
   }
+#endif
 
   // nucleus
   TV_READ_SCALAR(nucleus_num, d.nucleus_num);
@@ -97,7 +144,9 @@ TrexioData read_trexio_data(const TrexioFile& file) {
   TV_READ_OPT_SCALAR(nucleus_repulsion, d.nucleus_repulsion, double);
 
   // electron
+#if TV_HAVE_trexio_read_electron_num
   TV_READ_OPT_SCALAR(electron_num, d.electron_num, int32_t);
+#endif
   TV_READ_OPT_SCALAR(electron_up_num, d.electron_up_num, int32_t);
   TV_READ_OPT_SCALAR(electron_dn_num, d.electron_dn_num, int32_t);
 
@@ -130,15 +179,25 @@ TrexioData read_trexio_data(const TrexioFile& file) {
     d.basis_prim_factor.assign(static_cast<size_t>(npr), 1.0);
     d.warnings.push_back("basis_prim_factor is missing; assuming 1");
   }
-  if (TV_HAS(basis_r_power)) {
-    TV_READ_ARRAY(basis_r_power, d.basis_r_power, nsh);
-  } else {
-    d.basis_r_power.assign(static_cast<size_t>(nsh), 0);
-  }
-  d.basis_has_complex = TV_HAS(basis_exponent_im) || TV_HAS(basis_coefficient_im);
+  d.basis_r_power.assign(static_cast<size_t>(nsh), 0);
+#if TV_HAVE_trexio_read_basis_r_power
+  if (TV_HAS(basis_r_power)) TV_READ_ARRAY(basis_r_power, d.basis_r_power, nsh);
+#endif
+#if TV_HAVE_trexio_has_basis_exponent_im
+  d.basis_has_complex = d.basis_has_complex || TV_HAS(basis_exponent_im);
+#endif
+#if TV_HAVE_trexio_has_basis_coefficient_im
+  d.basis_has_complex = d.basis_has_complex || TV_HAS(basis_coefficient_im);
+#endif
+#if TV_HAVE_trexio_has_basis_oscillation_arg
   d.basis_has_oscillation = TV_HAS(basis_oscillation_arg);
+#endif
 
+#if TV_HAVE_trexio_has_ecp
   d.has_ecp = TV_HAS(ecp);
+#elif TV_HAVE_trexio_has_ecp_num
+  d.has_ecp = TV_HAS(ecp_num);
+#endif
 
   // ao
   TV_READ_OPT_SCALAR(ao_cartesian, d.ao_cartesian, int32_t);
@@ -156,10 +215,16 @@ TrexioData read_trexio_data(const TrexioFile& file) {
     TV_READ_SCALAR(mo_num, d.mo_num);
     const int64_t nc = static_cast<int64_t>(d.mo_num) * d.ao_num;
     TV_READ_OPT_ARRAY(mo_coefficient, d.mo_coefficient, nc);
+#if TV_HAVE_trexio_read_mo_coefficient_im
     TV_READ_OPT_ARRAY(mo_coefficient_im, d.mo_coefficient_im, nc);
+#endif
     TV_READ_OPT_ARRAY(mo_occupation, d.mo_occupation, d.mo_num);
+#if TV_HAVE_trexio_read_mo_spin
     TV_READ_OPT_ARRAY(mo_spin, d.mo_spin, d.mo_num);
+#endif
+#if TV_HAVE_trexio_read_mo_k_point
     TV_READ_OPT_ARRAY(mo_k_point, d.mo_k_point, d.mo_num);
+#endif
   }
 
   // one-electron integrals
@@ -167,17 +232,29 @@ TrexioData read_trexio_data(const TrexioFile& file) {
   TV_READ_1E(ao_1e_int, kinetic, d.ao_1e_int, d.ao_num);
   TV_READ_1E(ao_1e_int, potential_n_e, d.ao_1e_int, d.ao_num);
   TV_READ_1E(ao_1e_int, core_hamiltonian, d.ao_1e_int, d.ao_num);
+#if TV_HAVE_trexio_read_ao_1e_int_dipole_x
   TV_READ_1E(ao_1e_int, dipole_x, d.ao_1e_int, d.ao_num);
+#endif
+#if TV_HAVE_trexio_read_ao_1e_int_dipole_y
   TV_READ_1E(ao_1e_int, dipole_y, d.ao_1e_int, d.ao_num);
+#endif
+#if TV_HAVE_trexio_read_ao_1e_int_dipole_z
   TV_READ_1E(ao_1e_int, dipole_z, d.ao_1e_int, d.ao_num);
+#endif
   if (d.mo_num > 0) {
     TV_READ_1E(mo_1e_int, overlap, d.mo_1e_int, d.mo_num);
     TV_READ_1E(mo_1e_int, kinetic, d.mo_1e_int, d.mo_num);
     TV_READ_1E(mo_1e_int, potential_n_e, d.mo_1e_int, d.mo_num);
     TV_READ_1E(mo_1e_int, core_hamiltonian, d.mo_1e_int, d.mo_num);
+#if TV_HAVE_trexio_read_mo_1e_int_dipole_x
     TV_READ_1E(mo_1e_int, dipole_x, d.mo_1e_int, d.mo_num);
+#endif
+#if TV_HAVE_trexio_read_mo_1e_int_dipole_y
     TV_READ_1E(mo_1e_int, dipole_y, d.mo_1e_int, d.mo_num);
+#endif
+#if TV_HAVE_trexio_read_mo_1e_int_dipole_z
     TV_READ_1E(mo_1e_int, dipole_z, d.mo_1e_int, d.mo_num);
+#endif
   }
 
   d.has_ao_2e_int_eri = TV_HAS(ao_2e_int_eri);

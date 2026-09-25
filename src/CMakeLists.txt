@@ -13,6 +13,7 @@ set_target_properties(trexio_validate_objects PROPERTIES
   VISIBILITY_INLINES_HIDDEN ON)
 target_include_directories(trexio_validate_objects PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/include")
+target_include_directories(trexio_validate_objects PRIVATE "${TREXIO_VALIDATE_FEATURES_DIR}")
 target_compile_definitions(trexio_validate_objects PRIVATE
   TREXIO_VALIDATE_BUILDING
   TREXIO_VALIDATE_VERSION="${PROJECT_VERSION}")

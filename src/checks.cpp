@@ -28,6 +28,10 @@ const std::vector<CheckInfo>& all_checks() {
     }
     c.push_back({"ao_2e_int_eri", "ao_2e_int.eri matches the recomputed AO electron repulsion integrals"});
     c.push_back({"mo_2e_int_eri", "mo_2e_int.eri matches the recomputed MO electron repulsion integrals"});
+    for (auto& info : c) {
+      auto it = unavailable_checks().find(info.name);
+      if (it != unavailable_checks().end()) info.description += " [unavailable: " + it->second + "]";
+    }
     return c;
   }();
   return checks;
@@ -132,6 +136,13 @@ std::vector<CheckResult> Runner::run() {
     if (opt_.skip.count(name) > 0) continue;
 
     CheckResult r;
+    auto unavailable = unavailable_checks().find(name);
+    if (unavailable != unavailable_checks().end()) {
+      // Requiring such a check by name fails; "all" means all available checks.
+      const bool named = opt_.require.count(name) > 0;
+      results.push_back({name, named ? Status::fail : Status::skip, unavailable->second});
+      continue;
+    }
     try {
       if (name == "basis") r = check_basis();
       else if (name == "nucleus_repulsion") r = check_nucleus_repulsion();
@@ -189,6 +200,11 @@ const Matrix& Runner::ao_matrix(const std::string& op) {
 CheckResult Runner::check_basis() {
   std::string warn;
   for (const auto& w : data_.warnings) warn += "; warning: " + w;
+  const std::vector<std::string> unreadable = unreadable_fields();
+  if (!unreadable.empty()) {
+    warn += "; note: this TREXIO library cannot read";
+    for (size_t k = 0; k < unreadable.size(); ++k) warn += (k ? ", " : " ") + unreadable[k];
+  }
   if (basis_unsupported_) return {"basis", Status::skip, "unsupported: " + basis_error_ + warn};
   if (!basis_) return {"basis", Status::fail, basis_error_ + warn};
   return {"basis", Status::pass,
@@ -326,6 +342,12 @@ CheckResult Runner::check_mo_orthonormality() {
   if (skipped > 0) extra += "; " + std::to_string(skipped) + " pairs of different spin/k-point not checked";
   CheckResult r = compare(name, total, "C^+ S C - 1", extra);
   if (r.status == Status::fail) {
+    for (const auto& field : unreadable_fields()) {
+      if (field == "mo.spin") {
+        r.detail += "; this TREXIO library cannot read mo.spin, so the MOs of an open-shell file are "
+                    "compared across spins";
+      }
+    }
     if (offdiag.max <= tol(name)) {
       r.detail += "; the MOs are orthogonal but not normalized, which points to a mismatch in the "
                   "normalization factors (basis.shell_factor, basis.prim_factor, ao.normalization)";

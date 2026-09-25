@@ -8,7 +8,10 @@
 #include <string>
 #include <vector>
 
+// TREXIO releases before 2.3 lack the extern "C" guards in trexio.h.
+extern "C" {
 #include <trexio.h>
+}
 
 namespace tv {
 
@@ -111,6 +114,13 @@ struct TrexioData {
 };
 
 TrexioData read_trexio_data(const TrexioFile& file);
+
+// Checks whose data the TREXIO library in use cannot read, with the reason.
+const std::map<std::string, std::string>& unavailable_checks();
+
+// Fields the TREXIO library in use cannot read, so that their absence from a
+// file cannot be relied upon (e.g. mo.spin of an open-shell file).
+std::vector<std::string> unreadable_fields();
 
 // Reads all stored ERIs of the "ao" or "mo" group.
 std::vector<SparseEri> read_sparse_eri(const TrexioFile& file, const std::string& group);

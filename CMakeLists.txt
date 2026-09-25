@@ -37,6 +37,7 @@ cmake_dependent_option(TREXIO_VALIDATE_INSTALL
 # ---------------------------------------------------------------- dependencies
 
 include(TrexioValidateDependencies)
+include(TrexioValidateFeatures)
 
 # ---------------------------------------------------------------- program and library
 

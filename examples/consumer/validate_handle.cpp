@@ -7,7 +7,7 @@
 int main(int argc, char** argv) {
   if (argc != 2) return 2;
   trexio_exit_code rc = TREXIO_SUCCESS;
-  trexio_t* file = trexio_open(argv[1], 'r', TREXIO_AUTO, &rc);
+  trexio_t* file = trexio_open(argv[1], 'r', TREXIO_HDF5, &rc);
   if (file == nullptr) return 2;
 
   const trexio_validate::Report report =
