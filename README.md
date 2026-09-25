@@ -110,7 +110,7 @@ configure, and HDF5 to read `.h5` files.
 ```cmake
 find_package(TrexioValidate REQUIRED)          # installed, or:
 # FetchContent_Declare(TrexioValidate
-#   GIT_REPOSITORY https://github.com/susilehtola/trexio-validate.git
+#   GIT_REPOSITORY https://github.com/TREX-CoE/trexio-validate.git
 #   GIT_TAG master)
 # FetchContent_MakeAvailable(TrexioValidate)
 

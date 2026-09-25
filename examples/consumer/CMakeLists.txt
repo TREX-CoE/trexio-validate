@@ -13,7 +13,7 @@ enable_testing()
 
 if(USE_FETCHCONTENT)
   include(FetchContent)
-  set(TREXIO_VALIDATE_GIT_URL "https://github.com/susilehtola/trexio-validate.git"
+  set(TREXIO_VALIDATE_GIT_URL "https://github.com/TREX-CoE/trexio-validate.git"
     CACHE STRING "Repository of trexio-validate")
   FetchContent_Declare(TrexioValidate
     GIT_REPOSITORY "${TREXIO_VALIDATE_GIT_URL}"
