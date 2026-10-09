@@ -33,6 +33,13 @@ if(NOT TV_HAVE_trexio_read_mo_spin)
   set_property(TEST valid_oh_631g_uhf PROPERTY DISABLED TRUE)
 endif()
 
+# Cartesian and spherical shells, typed one by one in ao.cartesian_shell.
+trexio_validate_add_test(valid_h2o_631gs_mixed FILE "${data}/h2o_631gs_mixed.h5"
+  REQUIRE all)
+if(NOT TV_HAVE_trexio_read_ao_cartesian_shell)
+  set_property(TEST valid_h2o_631gs_mixed PROPERTY DISABLED TRUE)
+endif()
+
 # ---------------------------------------------------------------- invalid files
 # Each file is broken in one way; only the check that should catch it is run.
 
@@ -50,6 +57,22 @@ expect_failure(invalid_ao_eri_value bad_ao_eri_value.h5 ao_2e_int_eri)
 expect_failure(invalid_ao_eri_missing bad_ao_eri_missing.h5 ao_2e_int_eri)
 expect_failure(invalid_pyscf_forge_ao_overlap bad_pyscf_forge_ao_integrals.h5 ao_1e_int_overlap)
 expect_failure(invalid_pyscf_forge_ao_eri bad_pyscf_forge_ao_integrals.h5 ao_2e_int_eri)
+
+# The check must fail for the given reason.
+function(expect_message name file check regex)
+  trexio_validate_add_test(${name} FILE "${data}/${file}" CHECKS ${check})
+  set_property(TEST ${name} PROPERTY PASS_REGULAR_EXPRESSION "FAIL  ${check} +${regex}")
+endfunction()
+
+expect_message(invalid_ao_no_cartesian bad_ao_no_cartesian.h5 basis
+  "neither ao.cartesian nor ao.cartesian_shell is present")
+expect_message(invalid_ao_both_cartesian bad_ao_both_cartesian.h5 basis
+  "both ao.cartesian and ao.cartesian_shell are present")
+expect_message(invalid_ao_cartesian_shell bad_ao_cartesian_shell.h5 basis
+  "ao.num is 18 but the shells define 19 functions of the types given in ao.cartesian_shell")
+if(NOT TV_HAVE_trexio_read_ao_cartesian_shell)
+  set_property(TEST invalid_ao_both_cartesian invalid_ao_cartesian_shell PROPERTY DISABLED TRUE)
+endif()
 
 # A required check whose data is missing fails.
 trexio_validate_add_test(require_missing_data FILE "${data}/n2_ccpvqz_sph.h5"
@@ -79,11 +102,17 @@ if(TREXIO_VALIDATE_LIBRARY)
   add_library(tv_memory_helper SHARED memory_helper.cpp)
   target_link_libraries(tv_memory_helper PRIVATE trexio_validate_objects)
   set_target_properties(tv_memory_helper PROPERTIES CXX_VISIBILITY_PRESET hidden)
+  target_include_directories(tv_memory_helper PRIVATE "${TREXIO_VALIDATE_FEATURES_DIR}")
 
   add_executable(test_memory test_memory.cpp)
   target_link_libraries(test_memory PRIVATE trexio_validate tv_memory_helper)
   add_test(NAME memory_backend COMMAND test_memory "${data}/h2o_631gs_sph.h5")
   set_tests_properties(memory_backend PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME memory_backend_mixed COMMAND test_memory "${data}/h2o_631gs_mixed.h5")
+  set_tests_properties(memory_backend_mixed PROPERTIES SKIP_RETURN_CODE 77)
+  if(NOT TV_HAVE_trexio_read_ao_cartesian_shell)
+    set_property(TEST memory_backend_mixed PROPERTY DISABLED TRUE)
+  endif()
 
   find_package(Python3 COMPONENTS Interpreter)
   if(TREXIO_VALIDATE_PYTHON AND Python3_FOUND)

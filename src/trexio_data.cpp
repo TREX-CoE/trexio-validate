@@ -116,6 +116,7 @@ std::vector<std::string> unreadable_fields() {
     if (!have) fields.push_back(field);
   };
   lacks(TV_HAVE_trexio_read_mo_spin, "mo.spin");
+  lacks(TV_HAVE_trexio_read_ao_cartesian_shell, "ao.cartesian_shell");
   lacks(TV_HAVE_trexio_read_basis_r_power, "basis.r_power");
   lacks(TV_HAVE_trexio_has_basis_oscillation_arg, "basis.oscillation_arg");
   lacks(TV_HAVE_trexio_has_basis_exponent_im && TV_HAVE_trexio_has_basis_coefficient_im,
@@ -201,6 +202,9 @@ TrexioData read_trexio_data(const TrexioFile& file) {
 
   // ao
   TV_READ_OPT_SCALAR(ao_cartesian, d.ao_cartesian, int32_t);
+#if TV_HAVE_trexio_read_ao_cartesian_shell
+  TV_READ_OPT_ARRAY(ao_cartesian_shell, d.ao_cartesian_shell, nsh);
+#endif
   TV_READ_SCALAR(ao_num, d.ao_num);
   TV_READ_OPT_ARRAY(ao_shell, d.ao_shell, d.ao_num);
   if (TV_HAS(ao_normalization)) {

@@ -12,7 +12,7 @@ far.
 
 | Check | What is verified |
 |---|---|
-| `basis` | basis and AO data are consistent and supported: `ao.num` equals the number of functions the shells define (2l+1 or (l+1)(l+2)/2 per shell, as `ao.cartesian` says), each shell has that many AOs in `ao.shell`, and all indices are in range |
+| `basis` | basis and AO data are consistent and supported: exactly one of `ao.cartesian` and `ao.cartesian_shell` is present, `ao.num` equals the number of functions the shells define (2l+1 or (l+1)(l+2)/2 per shell, as `ao.cartesian` or `ao.cartesian_shell` says), each shell has that many AOs in `ao.shell`, and all indices are in range |
 | `nucleus_repulsion` | `nucleus.repulsion` matches the charges and coordinates |
 | `electron_count` | `electron.num = up_num + dn_num`; `mo.occupation` sums to the electron count (per spin when `mo.spin` is present) |
 | `mo_orthonormality` | C<sup>†</sup> S C = 1 with S computed from the basis set |
@@ -43,6 +43,9 @@ Everything is computed from the definitions of the TREXIO specification
 * the contraction coefficients are N<sub>s</sub> f<sub>ks</sub> a<sub>ks</sub>
   (`shell_factor`, `prim_factor`, `coefficient`), and AO *i* carries the extra
   factor N'<sub>i</sub> (`ao.normalization`);
+* whether shells are Cartesian or spherical is given for all of them by
+  `ao.cartesian`, or shell by shell by `ao.cartesian_shell` (newer TREXIO); a
+  file must have exactly one of the two;
 * Cartesian AOs are the monomials x<sup>a</sup>y<sup>b</sup>z<sup>c</sup> in
   alphabetical order; spherical AOs are the Racah-normalized real regular solid
   harmonics S<sub>l</sub><sup>m</sup> in the order 0, +1, −1, …, +l, −l, with
@@ -108,8 +111,9 @@ cmake --install build --prefix /path/to/prefix
 ```
 
 TREXIO is found through its CMake package, pkg-config, or plain
-`find_library`/`find_path` (`TREXIO_INCLUDE_DIR`, `TREXIO_LIBRARY`); libcint
-through `LIBCINT_INCLUDE_DIR` and `LIBCINT_LIBRARY`.
+`find_library`/`find_path`, in this order; setting both `TREXIO_INCLUDE_DIR`
+and `TREXIO_LIBRARY` selects a TREXIO explicitly, ahead of all of these. libcint
+is found through `LIBCINT_INCLUDE_DIR` and `LIBCINT_LIBRARY`.
 
 To build without installed dependencies, set `TREXIO_VALIDATE_FETCH_TREXIO=ON`
 and/or `TREXIO_VALIDATE_FETCH_LIBCINT=ON`. These download TREXIO 2.6.1 and

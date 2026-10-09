@@ -8,6 +8,7 @@
 #include <string>
 
 #include "trexio_data.hpp"
+#include "trexio_validate_features.h"
 
 #ifdef TREXIO_MEMORY
 
@@ -43,7 +44,10 @@ void copy(const tv::TrexioFile& in, trexio_t* out, int corruption) {
   TV_W(basis_coefficient, d.basis_coefficient.data());
   TV_W(basis_prim_factor, d.basis_prim_factor.data());
 
-  TV_W(ao_cartesian, *d.ao_cartesian);
+  if (d.ao_cartesian) TV_W(ao_cartesian, *d.ao_cartesian);
+#if TV_HAVE_trexio_read_ao_cartesian_shell
+  if (!d.ao_cartesian_shell.empty()) TV_W(ao_cartesian_shell, d.ao_cartesian_shell.data());
+#endif
   TV_W(ao_num, d.ao_num);
   if (!d.ao_shell.empty()) TV_W(ao_shell, d.ao_shell.data());
   TV_W(ao_normalization, d.ao_normalization.data());
