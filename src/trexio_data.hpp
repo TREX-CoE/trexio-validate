@@ -90,7 +90,8 @@ struct TrexioData {
   bool has_ecp = false;
 
   // ao
-  std::optional<int32_t> ao_cartesian;
+  std::optional<int32_t> ao_cartesian;   // for all shells, or
+  std::vector<int32_t> ao_cartesian_shell;  // [basis_shell_num], shell by shell
   int32_t ao_num = 0;
   std::vector<int32_t> ao_shell;         // [ao_num]
   std::vector<double> ao_normalization;  // [ao_num]

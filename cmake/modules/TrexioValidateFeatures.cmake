@@ -99,6 +99,7 @@ set(_tv_optional
   trexio_has_basis_oscillation_arg
   trexio_has_ecp
   trexio_has_ecp_num
+  trexio_read_ao_cartesian_shell
   trexio_read_mo_coefficient_im
   trexio_read_mo_spin
   trexio_read_mo_k_point

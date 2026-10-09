@@ -16,6 +16,7 @@ needed to regenerate them.
 
 import importlib.util
 import os
+import shutil
 import sys
 
 import numpy as np
@@ -123,6 +124,115 @@ def write_bad_ao_counts(p, water_cart):
         trexio.write_mo_coefficient(tf, np.ascontiguousarray(np.hstack([c, np.zeros((c.shape[0], 1))])))
 
 
+def write_ao_cartesian_shell(path, flags):
+    """Write ao.cartesian_shell, with a TREXIO new enough to have it.
+
+    The trexio Python module is used if it has the field; otherwise the C
+    library named by the TREXIO_LIBRARY environment variable is called through
+    ctypes.
+    """
+    flags = np.ascontiguousarray(flags, dtype=np.int32)
+    if hasattr(trexio, "write_ao_cartesian_shell"):
+        with trexio.File(path, "u", back_end=trexio.TREXIO_HDF5) as tf:
+            trexio.write_ao_cartesian_shell(tf, flags)
+        return
+    import ctypes
+    lib = ctypes.CDLL(os.environ["TREXIO_LIBRARY"])
+    lib.trexio_open.restype = ctypes.c_void_p
+    lib.trexio_open.argtypes = [ctypes.c_char_p, ctypes.c_char, ctypes.c_int32, ctypes.POINTER(ctypes.c_int32)]
+    lib.trexio_write_ao_cartesian_shell.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    lib.trexio_close.argtypes = [ctypes.c_void_p]
+    rc = ctypes.c_int32()
+    f = lib.trexio_open(path.encode(), b"u", 0, ctypes.byref(rc))  # 0: TREXIO_HDF5
+    assert f and rc.value == 0, rc.value
+    assert lib.trexio_write_ao_cartesian_shell(f, flags.ctypes.data) == 0
+    assert lib.trexio_close(f) == 0
+
+
+def rewrite_ao_group(tf, ao_num, ao_shell, normalization, cartesian=None):
+    trexio.delete_ao(tf)
+    if cartesian is not None:
+        trexio.write_ao_cartesian(tf, cartesian)
+    trexio.write_ao_num(tf, ao_num)
+    trexio.write_ao_shell(tf, np.ascontiguousarray(ao_shell, dtype=np.int32))
+    trexio.write_ao_normalization(tf, np.ascontiguousarray(normalization))
+
+
+def write_mixed_shells(p):
+    """Files whose shells are typed one by one in ao.cartesian_shell.
+
+    s and p functions are the same in both conventions (S_1^{+1} = x, ...),
+    only the order of the p components differs: z, x, y for spherical and
+    x, y, z for Cartesian shells. Marking the s and p shells of the spherical
+    water file as Cartesian, and reordering the p components in every array
+    indexed by AOs, therefore gives a valid file with mixed shell types.
+    """
+    src = p("h2o_631gs_sph.h5")
+    with trexio.File(src, "r", back_end=trexio.TREXIO_HDF5) as tf:
+        ang_mom = np.array(trexio.read_basis_shell_ang_mom(tf))
+        ao_num = trexio.read_ao_num(tf)
+        ao_shell = np.array(trexio.read_ao_shell(tf))
+        norm = np.array(trexio.read_ao_normalization(tf))
+        mo = {f: getattr(trexio, "read_mo_" + f)(tf)
+              for f in ["type", "num", "coefficient", "occupation", "energy", "spin", "class", "symmetry", "k_point"]
+              if getattr(trexio, "has_mo_" + f)(tf)}
+        ao_1e = {f: np.array(getattr(trexio, "read_ao_1e_int_" + f)(tf))
+                 for f in ["overlap", "kinetic", "potential_n_e", "core_hamiltonian",
+                           "dipole_x", "dipole_y", "dipole_z"]
+                 if getattr(trexio, "has_ao_1e_int_" + f)(tf)}
+        n = trexio.read_ao_2e_int_eri_size(tf)
+        eri_idx, eri_val, _, _ = trexio.read_ao_2e_int_eri(tf, 0, n)
+
+    # new AO i is old AO new_to_old[i]
+    new_to_old = np.arange(ao_num)
+    for s in np.flatnonzero(ang_mom == 1):
+        z, x, y = np.flatnonzero(ao_shell == s)
+        new_to_old[[z, x, y]] = [x, y, z]
+    old_to_new = np.argsort(new_to_old)
+    flags = (ang_mom <= 1).astype(np.int32)
+
+    def write(name, flags, cartesian=None):
+        f = p(name)
+        shutil.copyfile(src, f)
+        with trexio.File(f, "u", back_end=trexio.TREXIO_HDF5) as tf:
+            rewrite_ao_group(tf, ao_num, ao_shell, norm[new_to_old])
+            trexio.delete_mo(tf)
+            for field, value in mo.items():
+                if field == "coefficient":
+                    value = np.ascontiguousarray(np.array(value)[:, new_to_old])
+                getattr(trexio, "write_mo_" + field)(tf, value)
+            trexio.delete_ao_1e_int(tf)
+            for field, m in ao_1e.items():
+                getattr(trexio, "write_ao_1e_int_" + field)(tf, np.ascontiguousarray(m[np.ix_(new_to_old, new_to_old)]))
+            trexio.delete_ao_2e_int(tf)
+            idx = old_to_new[np.asarray(eri_idx).reshape(-1, 4)].astype(np.int32)
+            trexio.write_ao_2e_int_eri(tf, 0, len(eri_val), np.ascontiguousarray(idx.ravel()),
+                                       np.ascontiguousarray(eri_val))
+        write_ao_cartesian_shell(f, flags)
+        if cartesian is not None:
+            # Newer TREXIO refuses to close a file with both fields, so
+            # ao.cartesian is added by a TREXIO that does not know
+            # ao.cartesian_shell, as an older program would.
+            assert not hasattr(trexio, "write_ao_cartesian_shell")
+            with trexio.File(f, "u", back_end=trexio.TREXIO_HDF5) as tf:
+                trexio.write_ao_cartesian(tf, cartesian)
+        print("wrote", f)
+
+    # Valid: s and p shells Cartesian, d shells spherical.
+    write("h2o_631gs_mixed.h5", flags)
+    # Invalid: the d shell marked Cartesian, which does not match ao.num.
+    write("bad_ao_cartesian_shell.h5", np.ones_like(flags))
+    # Invalid: ao.cartesian as well.
+    write("bad_ao_both_cartesian.h5", flags, cartesian=1)
+
+    # Invalid: neither ao.cartesian nor ao.cartesian_shell.
+    f = p("bad_ao_no_cartesian.h5")
+    shutil.copyfile(p("h2o_631gs_cart.h5"), f)
+    with trexio.File(f, "u", back_end=trexio.TREXIO_HDF5) as tf:
+        rewrite_ao_group(tf, trexio.read_ao_num(tf), trexio.read_ao_shell(tf), trexio.read_ao_normalization(tf))
+    print("wrote", f)
+
+
 def main(outdir):
     os.makedirs(outdir, exist_ok=True)
     p = lambda name: os.path.join(outdir, name)
@@ -154,6 +264,7 @@ def main(outdir):
     write(p("bad_pyscf_forge_ao_integrals.h5"), water, write_ao_eri=True, eri_sym="s8")
 
     write_bad_ao_counts(p, water_cart)
+    write_mixed_shells(p)
 
     # MO coefficients in PySCF's AO order instead of TREXIO's.
     f = p("bad_ao_order.h5")

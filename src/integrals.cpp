@@ -35,6 +35,38 @@ std::string lower(std::string s) {
 
 int nfunc(int l, bool cartesian) { return cartesian ? ncart(l) : 2 * l + 1; }
 
+// Whether each shell is Cartesian (true) or spherical. The type is given either
+// for all shells by ao.cartesian, or shell by shell by ao.cartesian_shell; a
+// file must have exactly one of the two.
+std::vector<bool> shell_types(const TrexioData& d) {
+  const size_t nsh = static_cast<size_t>(std::max(d.basis_shell_num, 0));
+  const bool global = d.ao_cartesian.has_value();
+  const bool per_shell = !d.ao_cartesian_shell.empty();
+  if (global && per_shell) {
+    throw Error("both ao.cartesian and ao.cartesian_shell are present; a file must have exactly one of them");
+  }
+  if (!global && !per_shell) {
+    // When this TREXIO cannot read ao.cartesian_shell, the basis check says so.
+    throw Error("neither ao.cartesian nor ao.cartesian_shell is present");
+  }
+  if (global) {
+    if (*d.ao_cartesian != 0 && *d.ao_cartesian != 1) {
+      throw Error("ao.cartesian is " + std::to_string(*d.ao_cartesian) + ", but it must be 0 or 1");
+    }
+    return std::vector<bool>(nsh, *d.ao_cartesian == 1);
+  }
+  std::vector<bool> types(nsh);
+  for (size_t s = 0; s < nsh; ++s) {
+    const int32_t v = d.ao_cartesian_shell[s];
+    if (v != 0 && v != 1) {
+      throw Error("ao.cartesian_shell of shell " + std::to_string(s) + " is " + std::to_string(v) +
+                  ", but it must be 0 or 1");
+    }
+    types[s] = v == 1;
+  }
+  return types;
+}
+
 }  // namespace
 
 void transform_axis(const std::vector<double>& in, std::array<int, 4>& dims, int axis,
@@ -68,8 +100,7 @@ Basis::Basis(const TrexioData& d) {
   }
   if (d.basis_has_complex) throw Unsupported("complex basis exponents/coefficients are not supported");
   if (d.basis_has_oscillation) throw Unsupported("oscillating basis functions are not supported");
-  if (!d.ao_cartesian) throw Error("ao_cartesian is missing");
-  const bool cartesian = *d.ao_cartesian != 0;
+  const std::vector<bool> cartesian = shell_types(d);
 
   std::vector<std::string> problems;
   auto problem = [&problems](const std::string& msg) {
@@ -120,16 +151,20 @@ Basis::Basis(const TrexioData& d) {
   for (int s = 0; s < nsh; ++s) {
     const int l = d.basis_shell_ang_mom[static_cast<size_t>(s)];
     if (l < 0 || l > max_ang_mom) continue;
-    expected_nao += nfunc(l, cartesian);
-    other_nao += nfunc(l, !cartesian);
+    expected_nao += nfunc(l, cartesian[static_cast<size_t>(s)]);
+    other_nao += nfunc(l, !cartesian[static_cast<size_t>(s)]);
   }
   if (expected_nao != nao_) {
-    std::string msg = "ao.num is " + std::to_string(nao_) + " but the shells define " + std::to_string(expected_nao) +
-                      (cartesian ? " Cartesian" : " spherical") + " functions";
-    if (other_nao == nao_ && other_nao != expected_nao) {
-      msg += std::string("; ") + std::to_string(nao_) + " is the number of " +
-             (cartesian ? "spherical" : "Cartesian") + " functions, so ao.cartesian = " +
-             std::to_string(*d.ao_cartesian) + " is probably wrong";
+    std::string msg = "ao.num is " + std::to_string(nao_) + " but the shells define " + std::to_string(expected_nao);
+    if (d.ao_cartesian) {
+      const bool cart = *d.ao_cartesian != 0;
+      msg += std::string(cart ? " Cartesian" : " spherical") + " functions";
+      if (other_nao == nao_) {
+        msg += std::string("; ") + std::to_string(nao_) + " is the number of " + (cart ? "spherical" : "Cartesian") +
+               " functions, so ao.cartesian = " + std::to_string(*d.ao_cartesian) + " is probably wrong";
+      }
+    } else {
+      msg += " functions of the types given in ao.cartesian_shell";
     }
     problem(msg);
   }
@@ -145,7 +180,7 @@ Basis::Basis(const TrexioData& d) {
   } else if (expected_nao == nao_) {
     int i = 0;
     for (int s = 0; s < nsh; ++s) {
-      for (int k = 0; k < nfunc(d.basis_shell_ang_mom[static_cast<size_t>(s)], cartesian); ++k) {
+      for (int k = 0; k < nfunc(d.basis_shell_ang_mom[static_cast<size_t>(s)], cartesian[static_cast<size_t>(s)]); ++k) {
         shell_aos_[static_cast<size_t>(s)].push_back(i++);
       }
     }
@@ -153,9 +188,10 @@ Basis::Basis(const TrexioData& d) {
   for (int s = 0; s < nsh && problems.empty(); ++s) {
     const int l = d.basis_shell_ang_mom[static_cast<size_t>(s)];
     const int n = static_cast<int>(shell_aos_[static_cast<size_t>(s)].size());
-    if (n != nfunc(l, cartesian)) {
-      problem("shell " + std::to_string(s) + " (l=" + std::to_string(l) + ") has " + std::to_string(n) +
-              " AOs in ao_shell, expected " + std::to_string(nfunc(l, cartesian)));
+    const bool cart = cartesian[static_cast<size_t>(s)];
+    if (n != nfunc(l, cart)) {
+      problem("shell " + std::to_string(s) + " (l=" + std::to_string(l) + ", " + (cart ? "Cartesian" : "spherical") +
+              ") has " + std::to_string(n) + " AOs in ao_shell, expected " + std::to_string(nfunc(l, cart)));
     }
   }
   if (!problems.empty()) {
@@ -190,8 +226,8 @@ Basis::Basis(const TrexioData& d) {
     bas_.insert(bas_.end(), {d.basis_nucleus_index[static_cast<size_t>(s)], l, static_cast<int>(prims.size()), 1, 0,
                              ptr_exp, ptr_coef, 0});
 
-    Matrix t(nfunc(l, cartesian), ncart(l));
-    if (cartesian) {
+    Matrix t(nfunc(l, cartesian[static_cast<size_t>(s)]), ncart(l));
+    if (cartesian[static_cast<size_t>(s)]) {
       for (int k = 0; k < t.rows; ++k) t(k, k) = 1.0;
     } else {
       const std::vector<int> ms = trexio_m_order(l);

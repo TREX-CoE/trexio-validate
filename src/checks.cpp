@@ -207,9 +207,17 @@ CheckResult Runner::check_basis() {
   }
   if (basis_unsupported_) return {"basis", Status::skip, "unsupported: " + basis_error_ + warn};
   if (!basis_) return {"basis", Status::fail, basis_error_ + warn};
+  std::string types;
+  if (data_.ao_cartesian) {
+    types = *data_.ao_cartesian ? "Cartesian" : "spherical";
+  } else {
+    const auto ncart = std::count(data_.ao_cartesian_shell.begin(), data_.ao_cartesian_shell.end(), 1);
+    types = std::to_string(ncart) + " Cartesian and " +
+            std::to_string(static_cast<long>(data_.ao_cartesian_shell.size()) - ncart) + " spherical";
+  }
   return {"basis", Status::pass,
-          "ao.num = " + std::to_string(data_.ao_num) + " agrees with the " + (*data_.ao_cartesian ? "Cartesian" : "spherical") +
-              " functions of the " + std::to_string(data_.basis_shell_num) + " shells" + warn};
+          "ao.num = " + std::to_string(data_.ao_num) + " agrees with the functions of the " +
+              std::to_string(data_.basis_shell_num) + " shells (" + types + ")" + warn};
 }
 
 // ---------------------------------------------------------------- nucleus
